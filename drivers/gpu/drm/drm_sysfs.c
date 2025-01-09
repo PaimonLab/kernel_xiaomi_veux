@@ -247,12 +247,42 @@ static ssize_t panel_info_show(struct device *device,
 }
 #endif
 
+/* BSP.LCM - 2022.07.15 - modify for LCM add hbm */
+static ssize_t hbm_show(struct device *device,
+				struct device_attribute *attr,
+				char *buf)
+{
+	int hbm_status;
+	struct drm_connector *connector = to_drm_connector(device);
+	hbm_status = dsi_display_get_hbm_status(connector);
+	return sprintf(buf, "%u\n", hbm_status);
+}
+
+static ssize_t hbm_store(struct device *device,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	int hbm_status;
+	ssize_t ret;
+
+	struct drm_connector *connector = to_drm_connector(device);
+
+	ret = kstrtoint(buf, 0, &hbm_status);
+	if (ret)
+		return ret;
+	ret = dsi_display_set_hbm(connector, hbm_status);
+
+	return ret ? ret : count;
+}
+/* end modify */
+
 static DEVICE_ATTR_RW(status);
 static DEVICE_ATTR_RO(enabled);
 static DEVICE_ATTR_RO(dpms);
 static DEVICE_ATTR_RO(modes);
 #ifdef CONFIG_WT_QGKI
 static DEVICE_ATTR_RO(panel_info);
+static DEVICE_ATTR_RW(hbm);
 #endif
 
 static struct attribute *connector_dev_attrs[] = {
@@ -262,6 +292,7 @@ static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_modes.attr,
 #ifdef CONFIG_WT_QGKI
 	&dev_attr_panel_info.attr,
+	&dev_attr_hbm.attr,
 #endif
 	NULL
 };
