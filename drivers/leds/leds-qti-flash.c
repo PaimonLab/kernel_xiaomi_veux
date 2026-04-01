@@ -20,6 +20,8 @@
 #include <linux/regmap.h>
 #include <linux/soc/qcom/battery_charger.h>
 
+extern void cam_flash_update_torch_brightness(int val);
+
 #include "leds.h"
 
 #define FLASH_LED_REVISION1			0x00
@@ -639,6 +641,11 @@ static void qti_flash_led_brightness_set(struct led_classdev *led_cdev,
 	fdev = container_of(led_cdev, struct led_classdev_flash, led_cdev);
 	fnode = container_of(fdev, struct flash_node_data, fdev);
 	led = fnode->led;
+
+	if (fnode->type == FLASH_LED_TYPE_TORCH) {
+		pr_err("DEBUG_SLIDER: qti-flash hook triggered for %s, value=%d\n", led_cdev->name, brightness);
+		cam_flash_update_torch_brightness(brightness);
+	}
 
 	rc = __qti_flash_led_brightness_set(led_cdev, brightness);
 	if (!rc)

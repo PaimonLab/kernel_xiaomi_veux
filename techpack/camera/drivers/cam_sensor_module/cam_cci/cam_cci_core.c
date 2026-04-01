@@ -750,6 +750,17 @@ static int32_t cam_cci_data_queue(struct cci_device *cci_dev,
 			i2c_msg->data_type);
 		return -EINVAL;
 	}
+
+	{
+		int k_dump;
+		for (k_dump = 0; k_dump < cmd_size; k_dump++) {
+			pr_crit("CAM_CCI_DUMP: m%d q%d sid:0x%x reg:0x%x val:0x%x dly:%d\n",
+				master, queue, c_ctrl->cci_info->sid,
+				i2c_msg->reg_setting[k_dump].reg_addr,
+				i2c_msg->reg_setting[k_dump].reg_data,
+				i2c_msg->reg_setting[k_dump].delay);
+		}
+	}
 	reg_offset = master * 0x200 + queue * 0x100;
 
 	cam_io_w_mb(cci_dev->cci_wait_sync_cfg.cid,
@@ -1489,6 +1500,8 @@ static int32_t cam_cci_i2c_write(struct v4l2_subdev *sd,
 			c_ctrl->cci_info->retries, CCI_I2C_READ_MAX_RETRIES);
 		goto ERROR;
 	}
+	/* Interception hook moved to cam_cci_data_queue */
+
 	rc = cam_cci_data_queue(cci_dev, c_ctrl, queue, sync_en);
 	if (rc < 0) {
 		CAM_ERR(CAM_CCI,
@@ -1856,15 +1869,17 @@ int32_t cam_cci_core_cfg(struct v4l2_subdev *sd,
 {
 	int32_t rc = 0;
 	struct cci_device *cci_dev = v4l2_get_subdevdata(sd);
-	enum cci_i2c_master_t master = MASTER_MAX;
+	enum cci_i2c_master_t master;
 
-	if (!cci_dev) {
-		CAM_ERR(CAM_CCI, "CCI_DEV IS NULL");
+	if (!cci_ctrl) {
+		CAM_ERR(CAM_CCI, "Invalid params");
 		return -EINVAL;
 	}
 
-	if (!cci_ctrl) {
-		CAM_ERR(CAM_CCI, "CCI_CTRL IS NULL");
+	pr_crit("CAM_CCI_LIFE: cam_cci_core_cfg called with cmd=%u\n", cci_ctrl->cmd);
+
+	if (!cci_dev) {
+		CAM_ERR(CAM_CCI, "Invalid params");
 		return -EINVAL;
 	}
 

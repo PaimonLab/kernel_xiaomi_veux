@@ -18,6 +18,10 @@
 #include <linux/of_device.h>
 #include <linux/gpio.h>
 #include <linux/regmap.h>
+#include <linux/soc/qcom/battery_charger.h>
+
+extern void cam_flash_update_torch_brightness(int val);
+
 #include <linux/power_supply.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
@@ -1827,6 +1831,11 @@ static void qpnp_flash_led_brightness_set(struct led_classdev *led_cdev,
 						strlen("led:torch"))) {
 		fnode = container_of(led_cdev, struct flash_node_data, cdev);
 		led = dev_get_drvdata(&fnode->pdev->dev);
+
+		if (fnode->type == FLASH_LED_TYPE_TORCH) {
+			pr_err("DEBUG_SLIDER: qpnp-flash hook triggered for %s, value=%d\n", led_cdev->name, value);
+			cam_flash_update_torch_brightness(value);
+		}
 	}
 
 	if (!led) {
