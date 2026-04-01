@@ -11,6 +11,8 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 
+extern void cam_flash_update_torch_brightness(int val);
+
 #define LM3601X_LED_IR		0x0
 #define LM3601X_LED_TORCH	0x1
 
@@ -179,6 +181,9 @@ static int lm3601x_brightness_set(struct led_classdev *cdev,
 	ret = lm3601x_read_faults(led);
 	if (ret < 0)
 		goto out;
+
+	pr_err("DEBUG_SLIDER: lm3601x hook triggered, value=%d\n", brightness);
+	cam_flash_update_torch_brightness(brightness);
 
 	if (led->led_mode == LM3601X_LED_TORCH)
 		led_mode_val = LM3601X_MODE_TORCH;

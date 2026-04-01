@@ -211,6 +211,10 @@ release_mutex:
 	return rc;
 }
 
+static void cam_flash_debug_log(const char *fn) {
+	pr_err("DEBUG_FLASH: %s called\n", fn);
+}
+
 static int32_t cam_flash_init_default_params(struct cam_flash_ctrl *fctrl)
 {
 	/* Validate input parameters */
@@ -394,6 +398,7 @@ static const struct v4l2_subdev_internal_ops cam_flash_internal_ops = {
 static int cam_flash_init_subdev(struct cam_flash_ctrl *fctrl)
 {
 	int rc = 0;
+	cam_flash_debug_log(__func__);
 
 	strlcpy(fctrl->device_name, CAM_FLASH_NAME,
 		sizeof(fctrl->device_name));
@@ -413,6 +418,133 @@ static int cam_flash_init_subdev(struct cam_flash_ctrl *fctrl)
 
 	return rc;
 }
+
+
+/* Global torch brightness override - set via sysfs, applied by cam_flash_i2c_apply_setting */
+int cam_torch_strength_override = -1; /* -1 = disabled (use HAL default) */
+EXPORT_SYMBOL(cam_torch_strength_override);
+
+static struct cam_flash_ctrl *g_fctrl;
+
+void cam_flash_update_torch_brightness(int val)
+{
+	struct cam_flash_ctrl *fctrl = g_fctrl;
+	struct cam_sensor_i2c_reg_setting i2c_write_cfg;
+	struct cam_sensor_i2c_reg_array reg_setting[3];
+	int rc;
+
+	pr_err("DEBUG_SLIDER: cam_flash_update_torch_brightness called with %d\n", val);
+
+	/* 
+	 * Scaling: If slider is 1-100, map it to 1-127 (LM36011 max).
+	 * Most Xiaomi/AOSP sliders use 100 as max.
+	 */
+	if (val > 0 && val <= 100) {
+		val = (val * 127) / 100;
+	}
+
+	if (val < 0) val = 0;
+	if (val > 127) val = 127;
+
+	cam_torch_strength_override = val;
+
+	if (!fctrl || !fctrl->io_master_info.cci_client)
+		return;
+
+	fctrl->io_master_info.cci_client->sid = 0x64;
+	fctrl->io_master_info.cci_client->cci_i2c_master = fctrl->cci_i2c_master;
+	fctrl->io_master_info.cci_client->i2c_freq_mode = 0;
+
+	i2c_write_cfg.reg_setting = reg_setting;
+	i2c_write_cfg.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_write_cfg.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_write_cfg.delay = 0;
+
+	if (val > 0) {
+		reg_setting[0].reg_addr = 0x01; reg_setting[0].reg_data = 0x00; reg_setting[0].delay = 0;
+		reg_setting[1].reg_addr = 0x04; reg_setting[1].reg_data = (uint16_t)val; reg_setting[1].delay = 0;
+		reg_setting[2].reg_addr = 0x01; reg_setting[2].reg_data = 0x02; reg_setting[2].delay = 0;
+		i2c_write_cfg.size = 3;
+	} else {
+		reg_setting[0].reg_addr = 0x01; reg_setting[0].reg_data = 0x00; reg_setting[0].delay = 0;
+		i2c_write_cfg.size = 1;
+	}
+
+	cam_flash_i2c_power_ops(fctrl, true);
+	rc = camera_io_dev_write(&(fctrl->io_master_info), &i2c_write_cfg);
+	if (rc < 0)
+		pr_err("cam_flash: Live update failed: %d\n", rc);
+}
+EXPORT_SYMBOL(cam_flash_update_torch_brightness);
+
+static ssize_t torch_strength_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct cam_flash_ctrl *fctrl = dev_get_drvdata(dev);
+	int val, rc;
+	struct cam_sensor_i2c_reg_setting i2c_write_cfg;
+	struct cam_sensor_i2c_reg_array reg_setting[3];
+
+	if (kstrtoint(buf, 0, &val) < 0)
+		return -EINVAL;
+	if (val < 0 || val > 127)
+		return -EINVAL;
+
+	cam_torch_strength_override = val;
+
+	if (!fctrl || !fctrl->io_master_info.cci_client) {
+		return count;
+	}
+
+	fctrl->io_master_info.cci_client->sid = 0x64;
+	fctrl->io_master_info.cci_client->cci_i2c_master = fctrl->cci_i2c_master;
+	fctrl->io_master_info.cci_client->i2c_freq_mode = 0;
+
+	i2c_write_cfg.reg_setting = reg_setting;
+	i2c_write_cfg.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_write_cfg.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_write_cfg.delay = 0;
+
+	if (val > 0) {
+		/* 1. EGER DONANIM UYKUYSA GUCU VER (Senin orijinal fikrin!) */
+		if (fctrl->flash_state != CAM_FLASH_STATE_START) {
+			cam_flash_i2c_power_ops(fctrl, true);
+			fctrl->flash_state = CAM_FLASH_STATE_START;
+			CAM_INFO(CAM_FLASH, "MK9_BRIDGE: Donanim gucu acildi.");
+		}
+
+		/* 2. ISIGI YAK VE SEVIYEYI AYARLA */
+		reg_setting[0].reg_addr = 0x04; 
+		reg_setting[0].reg_data = (uint16_t)val; 
+		reg_setting[0].delay = 0;
+		i2c_write_cfg.size = 1;
+
+		rc = camera_io_dev_write(&(fctrl->io_master_info), &i2c_write_cfg);
+		if (rc < 0)
+			CAM_ERR(CAM_FLASH, "Live CCI write failed: val=%d rc=%d", val, rc);
+	} else {
+		/* 1. ONCE ISIGI KAPAT (0x00 yaz) */
+		reg_setting[0].reg_addr = 0x01; 
+		reg_setting[0].reg_data = 0x00; 
+		reg_setting[0].delay = 0;
+		i2c_write_cfg.size = 1;
+
+		rc = camera_io_dev_write(&(fctrl->io_master_info), &i2c_write_cfg);
+		if (rc < 0)
+			CAM_ERR(CAM_FLASH, "Live CCI write failed: val=%d rc=%d", val, rc);
+
+		/* 2. SGCAM COKMESIN DIYE GUCU KES VE YOLU SERBEST BIRAK (Can damari!) */
+		if (fctrl->flash_state == CAM_FLASH_STATE_START) {
+			cam_flash_i2c_power_ops(fctrl, false);
+			fctrl->flash_state = CAM_FLASH_STATE_INIT;
+			CAM_INFO(CAM_FLASH, "MK9_BRIDGE: Donanim gucu kesildi, yol serbest.");
+		}
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(torch_strength);
 
 static int cam_flash_component_bind(struct device *dev,
 	struct device *master_dev, void *data)
@@ -538,6 +670,12 @@ static int cam_flash_component_bind(struct device *dev,
 	mutex_init(&(fctrl->flash_mutex));
 
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
+	
+	/* Create sysfs node for torch strength control */
+	rc = device_create_file(&pdev->dev, &dev_attr_torch_strength);
+	if (rc)
+		CAM_ERR(CAM_FLASH, "Failed to create sysfs torch_strength: %d", rc);
+
 	CAM_DBG(CAM_FLASH, "Component bound successfully");
 	return rc;
 
@@ -570,6 +708,9 @@ static void cam_flash_component_unbind(struct device *dev,
 	mutex_lock(&fctrl->flash_mutex);
 	cam_flash_shutdown(fctrl);
 	mutex_unlock(&fctrl->flash_mutex);
+	
+	device_remove_file(&fctrl->pdev->dev, &dev_attr_torch_strength);
+	
 	cam_unregister_subdev(&(fctrl->v4l2_dev_str));
 	cam_flash_put_source_node_data(fctrl);
 	platform_set_drvdata(pdev, NULL);
@@ -635,6 +776,7 @@ static int32_t cam_flash_i2c_driver_probe(struct i2c_client *client,
 	fctrl->soc_info.dev = &client->dev;
 	fctrl->soc_info.dev_name = client->name;
 	fctrl->io_master_info.master_type = I2C_MASTER;
+	g_fctrl = fctrl;
 
 	rc = cam_flash_get_dt_data(fctrl, &fctrl->soc_info);
 	if (rc) {

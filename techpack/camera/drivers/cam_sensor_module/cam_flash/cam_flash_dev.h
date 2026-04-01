@@ -21,7 +21,8 @@
 
 #if IS_REACHABLE(CONFIG_LEDS_QPNP_FLASH_V2)
 #include <linux/leds-qpnp-flash.h>
-#elif IS_REACHABLE(CONFIG_LEDS_QTI_FLASH)
+#endif
+#if IS_REACHABLE(CONFIG_LEDS_QTI_FLASH)
 #include <linux/leds-qti-flash.h>
 #endif
 

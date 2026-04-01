@@ -13,6 +13,9 @@
 #include "cam_packet_util.h"
 #include <linux/math64.h>
 
+/* torch_strength sysfs override - set in cam_flash_dev.c */
+extern int cam_torch_strength_override;
+
 static uint default_on_timer = 2;
 module_param(default_on_timer, uint, 0644);
 
@@ -712,6 +715,33 @@ int cam_flash_i2c_apply_setting(struct cam_flash_ctrl *fctrl,
 			list_for_each_entry(i2c_list,
 				&(i2c_set->list_head),
 				list) {
+				/* TORCH BRIGHTNESS INTERCEPT: Override reg 0x03 with user value */
+				if (i2c_list->i2c_settings.reg_setting &&
+				    cam_torch_strength_override >= 0) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						if (i2c_list->i2c_settings.reg_setting[k].reg_addr == 0x04) {
+							CAM_ERR(CAM_FLASH,
+								"TORCH_OVERRIDE: reg=0x03, old=0x%x -> new=0x%x",
+								i2c_list->i2c_settings.reg_setting[k].reg_data,
+								cam_torch_strength_override);
+							i2c_list->i2c_settings.reg_setting[k].reg_data =
+								(uint16_t)cam_torch_strength_override;
+						}
+					}
+				}
+				/* DUMP I2C PACKETS FOR REVERSE ENGINEERING */
+				if (i2c_list->i2c_settings.reg_setting) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						pr_err("CAM_FLASH_DUMP: reg=0x%x, data=0x%x, delay=%d, mask=0x%x\n",
+							i2c_list->i2c_settings.reg_setting[k].reg_addr,
+							i2c_list->i2c_settings.reg_setting[k].reg_data,
+							i2c_list->i2c_settings.reg_setting[k].delay,
+							i2c_list->i2c_settings.reg_setting[k].data_mask);
+					}
+				}
+				
 				rc = cam_sensor_util_i2c_apply_setting
 					(&(fctrl->io_master_info), i2c_list);
 				if (rc) {
@@ -725,6 +755,33 @@ int cam_flash_i2c_apply_setting(struct cam_flash_ctrl *fctrl,
 			list_for_each_entry(i2c_list,
 				&(fctrl->i2c_data.init_settings.list_head),
 				list) {
+				/* TORCH BRIGHTNESS INTERCEPT (init_settings) */
+				if (i2c_list->i2c_settings.reg_setting &&
+				    cam_torch_strength_override >= 0) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						if (i2c_list->i2c_settings.reg_setting[k].reg_addr == 0x04) {
+							CAM_ERR(CAM_FLASH,
+								"TORCH_OVERRIDE INIT: 0x%x->0x%x",
+								i2c_list->i2c_settings.reg_setting[k].reg_data,
+								cam_torch_strength_override);
+							i2c_list->i2c_settings.reg_setting[k].reg_data =
+								(uint16_t)cam_torch_strength_override;
+						}
+					}
+				}
+				/* DUMP I2C PACKETS FOR REVERSE ENGINEERING */
+				if (i2c_list->i2c_settings.reg_setting) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						pr_err("CAM_FLASH_DUMP: reg=0x%x, data=0x%x, delay=%d, mask=0x%x\n",
+							i2c_list->i2c_settings.reg_setting[k].reg_addr,
+							i2c_list->i2c_settings.reg_setting[k].reg_data,
+							i2c_list->i2c_settings.reg_setting[k].delay,
+							i2c_list->i2c_settings.reg_setting[k].data_mask);
+					}
+				}
+				
 				rc = cam_sensor_util_i2c_apply_setting
 					(&(fctrl->io_master_info), i2c_list);
 				if ((rc == -EAGAIN) &&
@@ -750,6 +807,33 @@ int cam_flash_i2c_apply_setting(struct cam_flash_ctrl *fctrl,
 			list_for_each_entry(i2c_list,
 				&(fctrl->i2c_data.config_settings.list_head),
 				list) {
+				/* TORCH BRIGHTNESS INTERCEPT (config_settings) */
+				if (i2c_list->i2c_settings.reg_setting &&
+				    cam_torch_strength_override >= 0) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						if (i2c_list->i2c_settings.reg_setting[k].reg_addr == 0x04) {
+							CAM_ERR(CAM_FLASH,
+								"TORCH_OVERRIDE CFG: 0x%x->0x%x",
+								i2c_list->i2c_settings.reg_setting[k].reg_data,
+								cam_torch_strength_override);
+							i2c_list->i2c_settings.reg_setting[k].reg_data =
+								(uint16_t)cam_torch_strength_override;
+						}
+					}
+				}
+				/* DUMP I2C PACKETS FOR REVERSE ENGINEERING */
+				if (i2c_list->i2c_settings.reg_setting) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						pr_err("CAM_FLASH_DUMP: reg=0x%x, data=0x%x, delay=%d, mask=0x%x\n",
+							i2c_list->i2c_settings.reg_setting[k].reg_addr,
+							i2c_list->i2c_settings.reg_setting[k].reg_data,
+							i2c_list->i2c_settings.reg_setting[k].delay,
+							i2c_list->i2c_settings.reg_setting[k].data_mask);
+					}
+				}
+				
 				rc = cam_sensor_util_i2c_apply_setting
 					(&(fctrl->io_master_info), i2c_list);
 				if (rc) {
@@ -767,6 +851,33 @@ int cam_flash_i2c_apply_setting(struct cam_flash_ctrl *fctrl,
 			(i2c_set->request_id == req_id)) {
 			list_for_each_entry(i2c_list,
 				&(i2c_set->list_head), list) {
+				/* TORCH BRIGHTNESS INTERCEPT: Override reg 0x03 with user value */
+				if (i2c_list->i2c_settings.reg_setting &&
+				    cam_torch_strength_override >= 0) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						if (i2c_list->i2c_settings.reg_setting[k].reg_addr == 0x04) {
+							CAM_ERR(CAM_FLASH,
+								"TORCH_OVERRIDE RT: reg=0x03, old=0x%x -> new=0x%x",
+								i2c_list->i2c_settings.reg_setting[k].reg_data,
+								cam_torch_strength_override);
+							i2c_list->i2c_settings.reg_setting[k].reg_data =
+								(uint16_t)cam_torch_strength_override;
+						}
+					}
+				}
+				/* DUMP I2C PACKETS FOR REVERSE ENGINEERING */
+				if (i2c_list->i2c_settings.reg_setting) {
+					int k;
+					for (k = 0; k < i2c_list->i2c_settings.size; k++) {
+						pr_err("CAM_FLASH_DUMP: reg=0x%x, data=0x%x, delay=%d, mask=0x%x\n",
+							i2c_list->i2c_settings.reg_setting[k].reg_addr,
+							i2c_list->i2c_settings.reg_setting[k].reg_data,
+							i2c_list->i2c_settings.reg_setting[k].delay,
+							i2c_list->i2c_settings.reg_setting[k].data_mask);
+					}
+				}
+				
 				rc = cam_sensor_util_i2c_apply_setting(
 					&(fctrl->io_master_info), i2c_list);
 				if (rc) {
