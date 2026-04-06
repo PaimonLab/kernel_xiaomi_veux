@@ -7,6 +7,7 @@
 #include "veux-haptics.dtsi"
 #include "veux-memory.dtsi"
 #include "veux-nfc.dtsi"
+#include "veux-gpu.dts"
 #include "veux-pinctrl.dtsi"
 #include "veux-pmic.dtsi"
 #include "veux-thermal.dtsi"
