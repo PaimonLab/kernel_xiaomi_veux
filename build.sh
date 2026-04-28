@@ -191,7 +191,6 @@ send_message "$(escape_markdown "✅ ${KERNEL_NAME} Kernel built successfully\! 
 # Package kernel
 rm -rf $ANYKERNEL3_DIR/Image $ANYKERNEL3_DIR/dtbo.img $ANYKERNEL3_DIR/dtb
 cp $PWD/out/arch/arm64/boot/Image $ANYKERNEL3_DIR/
-cp $PWD/out/arch/arm64/boot/dtbo.img $ANYKERNEL3_DIR/
 cp $PWD/out/arch/arm64/boot/dts/vendor/xiaomi/peux.dtb $ANYKERNEL3_DIR/dtb
 
 cd $ANYKERNEL3_DIR/
