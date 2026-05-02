@@ -14,7 +14,6 @@ DEVICE_CODENAME="veux"  # Device codename (e.g., veux, garnet, etc.)
 DEVICE_NAME="Redmi Note 11E Pro/Redmi Note 11 Pro 5G/POCO X4 Pro 5G"      # Device Market name (e.g., POCO X4 PRO 5G)
 KERNEL_NAME="Starry"      # Kernel name
 KERNEL_DEFCONFIG="vendor/${DEVICE_CODENAME}-qgki_defconfig"
-FINAL_KERNEL_ZIP="${KERNEL_NAME}-${BUILD_STATUS}-Kernel-${DEVICE_CODENAME}-$(date '+%Y%m%d').zip"
 
 # SourceForge Upload Config
 SF_USER="takixamru"
@@ -72,6 +71,8 @@ done
 echo ""
 echo ">>> Selected Build Type: $BUILD_STATUS"
 echo ""
+
+FINAL_KERNEL_ZIP="${KERNEL_NAME}-${BUILD_STATUS}-Kernel-${DEVICE_CODENAME}-$(date '+%Y%m%d').zip"
 
 # MarkdownV2 escape function for Telegram
 escape_markdown() {
