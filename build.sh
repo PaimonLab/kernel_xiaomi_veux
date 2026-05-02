@@ -25,6 +25,8 @@ CHANGELOG_REPO="$HOME/changelogs"     # local clone of your GitHub changelogs re
 CHANGELOG_DEVICE_DIR="${CHANGELOG_REPO}/${DEVICE_CODENAME}"
 
 # AnyKernel3 Config
+ANYKERNEL3_REPO="https://github.com/Starrykernel/AnyKernel3.git"
+ANYKERNEL3_BRANCH="veux"
 ANYKERNEL3_DIR="$PWD/AnyKernel3"
 
 BUILD_HOSTNAME=$(hostname)
@@ -151,6 +153,15 @@ if ! [ -d "$HOME/clang" ]; then
     send_message "$(escape_markdown "⚙️ Clang not found! Cloning...")"
     if ! git clone -q https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r547379.git -b 15.0 --depth=1 --single-branch ~/clang; then
         send_message "$(escape_markdown "❌ Cloning failed! Aborting...")"
+        exit 1
+    fi
+fi
+
+# Clone AnyKernel3 if missing
+if [ ! -d "$ANYKERNEL3_DIR" ]; then
+    send_message "$(escape_markdown "📦 AnyKernel3 not found. Cloning...")"
+    if ! git clone -q --depth=1 -b "$ANYKERNEL3_BRANCH" "$ANYKERNEL3_REPO" "$ANYKERNEL3_DIR"; then
+        send_message "$(escape_markdown "❌ Failed to clone AnyKernel3. Aborting build.")"
         exit 1
     fi
 fi
