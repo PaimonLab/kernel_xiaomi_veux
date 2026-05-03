@@ -1,251 +1,247 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 #
-# This Bash script automates the process of building a custom kernel for any device using Clang.
-# It packages the compiled kernel with AnyKernel3 and sends real-time updates via Telegram.
-# USAGE : ./build.sh or bash build.sh
+# Copyright (C) 2022-2023 Neebe3289 <neebexd@gmail.com>
 #
-# Copyright (C) 2025 Amrita Das <bhabanidas431@gmail.com>
-# Licensed under the GNU General Public License v2.0
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Script for krenel compilation !!
 
-# Set Kernel Build Variables
-DEVICE_CODENAME="veux"  # Device codename (e.g., veux, garnet, etc.)
-DEVICE_NAME="Redmi Note 11E Pro/Redmi Note 11 Pro 5G/POCO X4 Pro 5G"      # Device Market name (e.g., POCO X4 PRO 5G)
-KERNEL_NAME="Starry"      # Kernel name
-KERNEL_DEFCONFIG="vendor/${DEVICE_CODENAME}-qgki_defconfig"
+# Load variables from config.env
+export $(grep -v '^#' config.env | xargs)
 
-# SourceForge Upload Config
-SF_USER="takixamru"
-SF_PROJECT="roms"        # lowercase
-SF_FOLDER="veux"              # folder inside SF project
+# Path
+MainPath="$(readlink -f -- $(pwd))"
+MainClangPath="${MainPath}/clang"
+AnyKernelPath="${MainPath}/anykernel"
+CrossCompileFlagTriple="aarch64-linux-gnu-"
+CrossCompileFlag64="aarch64-linux-gnu-"
+CrossCompileFlag32="arm-linux-gnueabi-"
 
-# Changelog Repo Config
-CHANGELOG_REPO="$HOME/changelogs"     # local clone of your GitHub changelogs repo
-CHANGELOG_DEVICE_DIR="${CHANGELOG_REPO}/${DEVICE_CODENAME}"
-
-# AnyKernel3 Config
-ANYKERNEL3_REPO="https://github.com/Starrykernel/AnyKernel3.git"
-ANYKERNEL3_BRANCH="veux"
-ANYKERNEL3_DIR="$PWD/AnyKernel3"
-
-BUILD_HOSTNAME=$(hostname)
-COMPILER_PATH="$HOME/clang/bin"
-
-echo ""
-echo "=============================="
-echo "   SELECT YOUR BUILD TYPE"
-echo "=============================="
-echo ""
-
-PS3="Choose option (1-5): "
-
-select opt in "STABLE" "BETA" "ALPHA" "TEST" "CUSTOM"; do
-    case $opt in
-        "STABLE")
-            BUILD_STATUS="STABLE"
-            break
-            ;;
-        "BETA")
-            BUILD_STATUS="BETA"
-            break
-            ;;
-        "ALPHA")
-            BUILD_STATUS="ALPHA"
-            break
-            ;;
-        "TEST")
-            BUILD_STATUS="TEST"
-            break
-            ;;
-        "CUSTOM")
-            read -rp "Enter custom tag: " CUSTOM_TAG
-            BUILD_STATUS="$CUSTOM_TAG"
-            break
-            ;;
-        *)
-            echo "Invalid choice. Try again."
-            ;;
-    esac
-done
-echo ""
-echo ">>> Selected Build Type: $BUILD_STATUS"
-echo ""
-
-FINAL_KERNEL_ZIP="${KERNEL_NAME}-${BUILD_STATUS}-Kernel-${DEVICE_CODENAME}-$(date '+%Y%m%d').zip"
-
-# MarkdownV2 escape function for Telegram
-escape_markdown() {
-    echo "$1" | sed -e 's/[][()_.~`>#+=|{}!\\-]/\\&/g'
-}
-
-# Detect Compiler
-if [ -d "$COMPILER_PATH" ]; then
-    export PATH="$COMPILER_PATH:$PATH"
-    COMPILER_NAME="$($COMPILER_PATH/clang --version | head -n 1 | sed -E 's/\(.*\)//' | awk '{$1=$1;print}')"
-else
-    COMPILER_NAME="Unknown Compiler"
-fi
-
-export ARCH=arm64
-export KBUILD_BUILD_HOST="アムリトクン"
-export KBUILD_BUILD_USER="私は彼女を愛している"
-export KBUILD_COMPILER_STRING="$COMPILER_NAME"
-
-# Telegram Bot Config
-BOT_TOKEN=""
-CHAT_ID=""
-
-# Function to send Telegram message
-send_message() {
-    curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-         -d "chat_id=${CHAT_ID}" \
-         -d "parse_mode=MarkdownV2" \
-         -d "text=$1"
-}
-
-# Upload to SF
-upload_to_sourceforge() {
-    local ZIP_FILE="$1"
-    local REMOTE_PATH="/home/frs/project/${SF_PROJECT:0:1}/${SF_PROJECT:0:1}${SF_PROJECT:1:1}/${SF_PROJECT}/${SF_FOLDER}/"
-
-    echo "Uploading $ZIP_FILE to SourceForge..."
-
-    rsync -avP --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r \
-        "$ZIP_FILE" \
-        "${SF_USER}@frs.sourceforge.net:${REMOTE_PATH}"
-
-    if [ $? -ne 0 ]; then
-        send_message "$(escape_markdown "❌ SourceForge upload failed!")"
+# Clone toolchain
+[[ "$(pwd)" != "${MainPath}" ]] && cd "${MainPath}"
+function getclang() {
+  if [ "${ClangName}" = "azure" ]; then
+    if [ ! -f "${MainClangPath}-azure/bin/clang" ]; then
+      echo "[!] Clang is set to azure, cloning it..."
+      git clone https://gitlab.com/Panchajanya1999/azure-clang clang-azure --depth=1
+      ClangPath="${MainClangPath}"-azure
+      export PATH="${ClangPath}/bin:${PATH}"
+      cd ${ClangPath}
+      wget "https://gist.github.com/dakkshesh07/240736992abf0ea6f0ee1d8acb57a400/raw/a835c3cf8d99925ca33cec3b210ee962904c9478/patch-for-old-glibc.sh" -O patch.sh && chmod +x patch.sh && ./patch.sh
+      cd ..
     else
-        send_message "$(escape_markdown "📤 Uploaded to SourceForge successfully")"
+      echo "[!] Clang already exists. Skipping..."
+      ClangPath="${MainClangPath}"-azure
+      export PATH="${ClangPath}/bin:${PATH}"
     fi
+  elif [ "${ClangName}" = "neutron" ] || [ "${ClangName}" = "" ]; then
+    if [ ! -f "${MainClangPath}-neutron/bin/clang" ]; then
+      echo "[!] Clang is set to neutron, cloning it..."
+      mkdir -p "${MainClangPath}"-neutron
+      ClangPath="${MainClangPath}"-neutron
+      export PATH="${ClangPath}/bin:${PATH}"
+      cd ${ClangPath}
+      curl -LOk "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+      chmod +x antman && ./antman -S
+      ./antman --patch=glibc
+      cd ..
+    else
+      echo "[!] Clang already exists. Skipping..."
+      ClangPath="${MainClangPath}"-neutron
+      export PATH="${ClangPath}/bin:${PATH}"
+    fi
+  elif [ "${ClangName}" = "proton" ]; then
+    if [ ! -f "${MainClangPath}-proton/bin/clang" ]; then
+      echo "[!] Clang is set to proton, cloning it..."
+      git clone https://github.com/kdrag0n/proton-clang clang-proton --depth=1
+      ClangPath="${MainClangPath}"-proton
+      export PATH="${ClangPath}/bin:${PATH}"
+    else
+      echo "[!] Clang already exists. Skipping..."
+      ClangPath="${MainClangPath}"-proton
+      export PATH="${ClangPath}/bin:${PATH}"
+    fi
+  elif [ "${ClangName}" = "zyc" ]; then
+    if [ ! -f "${MainClangPath}-zyc/bin/clang" ]; then
+      echo "[!] Clang is set to zyc, cloning it..."
+      mkdir -p ${MainClangPath}-zyc
+      cd clang-zyc
+      wget -q $(curl -k https://raw.githubusercontent.com/ZyCromerZ/Clang/main/Clang-main-link.txt 2>/dev/null) -O "zyc-clang.tar.gz"
+      tar -xf zyc-clang.tar.gz
+      ClangPath="${MainClangPath}"-zyc
+      export PATH="${ClangPath}/bin:${PATH}"
+      rm -f zyc-clang.tar.gz
+      cd ..
+    else
+      echo "[!] Clang already exists. Skipping..."
+      ClangPath="${MainClangPath}"-zyc
+      export PATH="${ClangPath}/bin:${PATH}"
+    fi
+  elif [ "${ClangName}" = "greenforce" ]; then
+    if [ ! -f "${MainClangPath}-greenforce/bin/clang" ]; then
+      echo "[!] Clang is set to greenforce, cloning it..."
+      mkdir -p ${MainClangPath}-greenforce
+      cd clang-greenforce
+      wget -q https://raw.githubusercontent.com/greenforce-project/greenforce_clang/main/get_latest_url.sh
+      source get_latest_url.sh; rm -rf get_latest_url.sh
+      wget -q $LATEST_URL_GZ -O "greenforce-clang.tar.gz"
+      tar -xf greenforce-clang.tar.gz
+      ClangPath="${MainClangPath}"-greenforce
+      export PATH="${ClangPath}/bin:${PATH}"
+      rm -f greenforce-clang.tar.gz
+      cd ..
+    else
+      echo "[!] Clang already exists. Skipping..."
+      ClangPath="${MainClangPath}"-greenforce
+      export PATH="${ClangPath}/bin:${PATH}"
+    fi
+  else
+    echo "[!] Incorrect clang name. Check config.env for clang names."
+    exit 1
+  fi
+  if [ ! -f '${MainClangPath}-${ClangName}/bin/clang' ]; then
+    export KBUILD_COMPILER_STRING="$(${MainClangPath}-${ClangName}/bin/clang --version | head -n 1)"
+  else
+    export KBUILD_COMPILER_STRING="Unknown"
+  fi
 }
-# Push changelogs
-push_changelog() {
-    local DATE_TAG
-    DATE_TAG="$(date '+%Y-%m-%d_%H-%M')"
-    local FILE="${CHANGELOG_DEVICE_DIR}/${DATE_TAG}.txt"
 
-    mkdir -p "${CHANGELOG_DEVICE_DIR}"
+function updateclang() {
+  [[ "$(pwd)" != "${MainPath}" ]] && cd "${MainPath}"
+  if [ "${ClangName}" = "neutron" ] || [ "${ClangName}" = "" ]; then
+    echo "[!] Clang is set to neutron, checking for updates..."
+    cd clang-neutron
+    if [ "$(./antman -U | grep "Nothing to do")" = "" ];then
+      ./antman --patch=glibc
+    else
+      echo "[!] No updates have been found, skipping"
+    fi
+    cd ..
+    elif [ "${ClangName}" = "zyc" ]; then
+      echo "[!] Clang is set to zyc, checking for updates..."
+      cd clang-zyc
+      ZycLatest="$(curl -k https://raw.githubusercontent.com/ZyCromerZ/Clang/main/Clang-main-lastbuild.txt)"
+      if [ "$(cat README.md | grep "Build Date : " | cut -d: -f2 | sed "s/ //g")" != "${ZycLatest}" ];then
+        echo "[!] An update have been found, updating..."
+        sudo rm -rf ./*
+        wget -q $(curl -k https://raw.githubusercontent.com/ZyCromerZ/Clang/main/Clang-main-link.txt 2>/dev/null) -O "zyc-clang.tar.gz"
+        tar -xf zyc-clang.tar.gz
+        rm -f zyc-clang.tar.gz
+      else
+        echo "[!] No updates have been found, skipping..."
+      fi
+      cd ..
+    elif [ "${ClangName}" = "azure" ]; then
+      cd clang-azure
+      git fetch -q origin main
+      git pull origin main
+      cd ..
+    elif [ "${ClangName}" = "proton" ]; then
+      cd clang-proton
+      git fetch -q origin master
+      git pull origin master
+      cd ..
+  fi
 
-    {
-        echo "Kernel: ${KERNEL_NAME}"
-        echo "Device: ${DEVICE_NAME} (${DEVICE_CODENAME})"
-        echo "Build Type: ${BUILD_STATUS}"
-        echo "Compiler: ${COMPILER_NAME}"
-        echo "Date: ${DATE_TAG}"
-        echo ""
-        echo "==== Latest Commits ===="
-        git log --oneline -100
-    } > "${FILE}"
-
-    cd "${CHANGELOG_REPO}" || exit 1
-    git pull --rebase
-    git add "${FILE}"
-    git commit -m "changelog(${DEVICE_CODENAME}): ${KERNEL_NAME} ${BUILD_STATUS} ${DATE_TAG}"
-    git push
 }
 
+# Enviromental variable
+DEVICE_MODEL="Redmi Note 11E Pro/Redmi Note 11 Pro 5G/POCO X4 Pro 5G"
+DEVICE_CODENAME="veux"
+BUILD_TIME="$(TZ="Asia/Kolkata" date "+%Y%m%d")"
+export DEVICE_DEFCONFIG="vendor/veux-qgki_defconfig"
+export ARCH="arm64"
+export KBUILD_BUILD_USER="Taki"
+export KBUILD_BUILD_HOST="StarryBuilder"
+export KERNEL_NAME="Starry Kernel"
+export SUBLEVEL="v5.4.$(cat "${MainPath}/Makefile" | grep "SUBLEVEL =" | sed 's/SUBLEVEL = *//g')"
+IMAGE="${MainPath}/out/arch/arm64/boot/Image"
+DTB_IMAGE="${MainPath}/out/arch/arm64/boot/dts/vendor/xiaomi/peux.dtb"
+CORES="$(nproc --all)"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-# Clone Clang if missing
-if ! [ -d "$HOME/clang" ]; then
-    send_message "$(escape_markdown "⚙️ Clang not found! Cloning...")"
-    if ! git clone -q https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r547379.git -b 15.0 --depth=1 --single-branch ~/clang; then
-        send_message "$(escape_markdown "❌ Cloning failed! Aborting...")"
-        exit 1
-    fi
+# Start Compile
+START=$(date +"%s")
+
+compile(){
+if [ "$ClangName" = "proton" ] || [ "$ClangName" = "greenforce" ]; then
+  sed -i 's/CONFIG_LLVM_POLLY=y/# CONFIG_LLVM_POLLY is not set/g' ${MainPath}/arch/$ARCH/configs/$DEVICE_DEFCONFIG || echo ""
+else
+  sed -i 's/# CONFIG_LLVM_POLLY is not set/CONFIG_LLVM_POLLY=y/g' ${MainPath}/arch/$ARCH/configs/$DEVICE_DEFCONFIG || echo ""
 fi
-
-# Clone AnyKernel3 if missing
-if [ ! -d "$ANYKERNEL3_DIR" ]; then
-    send_message "$(escape_markdown "📦 AnyKernel3 not found. Cloning...")"
-    if ! git clone -q --depth=1 -b "$ANYKERNEL3_BRANCH" "$ANYKERNEL3_REPO" "$ANYKERNEL3_DIR"; then
-        send_message "$(escape_markdown "❌ Failed to clone AnyKernel3. Aborting build.")"
-        exit 1
-    fi
-fi
-
-# Start build
-BUILD_START=$(date +"%s")
-
-send_message "*$(escape_markdown "$KERNEL_NAME") Kernel Build Started\!*
-📱 *Device:* \`$(escape_markdown "$DEVICE_NAME") \($(escape_markdown "$DEVICE_CODENAME")\)\`
-🖥 *Building on:* \`$(escape_markdown "$BUILD_HOSTNAME")\`
-⚙️ *Compiler:* \`$(escape_markdown "$COMPILER_NAME")\`
-🔰 *Build Status:* \`$(escape_markdown "$BUILD_STATUS")\`"
-
-# Clean and defconfig
-make O=out clean
-make mrproper
-make $KERNEL_DEFCONFIG O=out
-
-# Compile Kernel
-make -j$(nproc) O=out \
-    ARCH=arm64 \
+make O=out ARCH=$ARCH $DEVICE_DEFCONFIG
+make -j"$CORES" ARCH=$ARCH O=out \
     CC=clang \
-    CLANG_TRIPLE=aarch64-linux-gnu- \
-    CROSS_COMPILE=aarch64-linux-gnu- \
-    CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
     LD=ld.lld \
     LLVM=1 \
-    LLVM_IAS=1
+    LLVM_IAS=1 \
+    AR=llvm-ar \
+    NM=llvm-nm \
+    OBJCOPY=llvm-objcopy \
+    OBJDUMP=llvm-objdump \
+    STRIP=llvm-strip \
+    CLANG_TRIPLE=${CrossCompileFlagTriple} \
+    CROSS_COMPILE=${CrossCompileFlag64} \
+    CROSS_COMPILE_ARM32=${CrossCompileFlag32} |& tee out/output.txt
 
-# Check build success
-if [ ! -f "$PWD/out/arch/arm64/boot/Image" ]; then
-    send_message "$(escape_markdown "❌ Build failed! Image not found.")"
-    exit 1
-fi
+   if [[ -f "$IMAGE" ]]; then
+      cd ${MainPath}
+      git clone --depth=1 ${AnyKernelRepo} -b ${AnyKernelBranch} ${AnyKernelPath}
+      cp $IMAGE ${AnyKernelPath}
+      if [[ -f "$DTB_IMAGE" ]]; then
+        rm -rf ${AnyKernelPath}/dtb
+        cp $DTB_IMAGE ${AnyKernelPath}/dtb
+      fi
+   else
+      echo "❌ Compile Kernel for $DEVICE_CODENAME failed, Check console log to fix it!"
+      if [ "$CLEANUP" = "yes" ];then
+        cleanup
+      fi
+      exit 1
+   fi
+}
 
-send_message "$(escape_markdown "✅ ${KERNEL_NAME} Kernel built successfully\! Zipping files...")"
+KERNEL_ZIP="${KERNEL_NAME}-${DEVICE_CODENAME}-${BUILD_TIME}.zip"
 
-# Package kernel
-rm -rf $ANYKERNEL3_DIR/Image $ANYKERNEL3_DIR/dtbo.img $ANYKERNEL3_DIR/dtb
-cp $PWD/out/arch/arm64/boot/Image $ANYKERNEL3_DIR/
-cp $PWD/out/arch/arm64/boot/dts/vendor/xiaomi/peux.dtb $ANYKERNEL3_DIR/dtb
+# Zipping function
+function zipping() {
+    cd ${AnyKernelPath} || exit 1
+    if [ "$KERNELSU" = "yes" ];then
+      VARIANT="[KSU] "
+      sed -i "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${SUBLEVEL} ${KERNEL_VARIANT} by ${KBUILD_BUILD_USER} for ${DEVICE_MODEL} (${DEVICE_CODENAME}) | KernelSU Version: ${KERNELSU_VERSION}/g" anykernel.sh
+    else
+      VARIANT="[Non-KSU] "
+      sed -i "s/kernel.string=.*/kernel.string=${KERNEL_NAME} ${SUBLEVEL} ${KERNEL_VARIANT} by ${KBUILD_BUILD_USER} for ${DEVICE_MODEL} (${DEVICE_CODENAME})/g" anykernel.sh
+    fi
+    zip -r9 "${VARIANT}${KERNEL_ZIP}" * -x .git README.md *placeholder
+    mv "${VARIANT}${KERNEL_ZIP}" ~/
+    cd ..
+    sudo rm -rf ${AnyKernelPath}
+    cleanup
+}
 
-cd $ANYKERNEL3_DIR/
-zip -r9 "../$FINAL_KERNEL_ZIP" * -x README $FINAL_KERNEL_ZIP
-cd ..
+# Cleanup function
+function cleanup() {
+    cd ${MainPath}
+    if [ "$CLEANUP" = "yes" ];then
+      sudo rm -rf out/
+    fi
+}
 
-# Upload ONLY release/stable builds to SourceForge
-if [ "$BUILD_STATUS" = "STABLE" ] || [ "$BUILD_STATUS" = "RELEASE" ]; then
-    upload_to_sourceforge "$PWD/$FINAL_KERNEL_ZIP"
-else
-    echo "Skipping SourceForge upload (non-release build)"
-fi
-
-# Push changelog only for release/stable builds
-if [ "$BUILD_STATUS" = "STABLE" ] || [ "$BUILD_STATUS" = "RELEASE" ]; then
-    echo "Pushing changelog..."
-    push_changelog
-else
-    echo "Skipping changelog push (non-release build)"
-fi
-
-# Upload only if NOT a release/STABLE build
-if [ "$BUILD_STATUS" != "STABLE" ] && [ "$BUILD_STATUS" != "RELEASE" ]; then
-    send_message "$(escape_markdown "📤 Uploading ${KERNEL_NAME} Kernel zip...")"
-
-    curl -F chat_id="$CHAT_ID" \
-         -F document=@"../$FINAL_KERNEL_ZIP" \
-         -F parse_mode="MarkdownV2" \
-         -F caption="✅ *$(escape_markdown "$KERNEL_NAME") Kernel for $(escape_markdown "$DEVICE_CODENAME") $(escape_markdown "$DEVICE_NAME")*
-🖥️ *Built on:* \`$(escape_markdown "$BUILD_HOSTNAME")\`
-⚙️ *Compiler:* \`$(escape_markdown "$COMPILER_NAME")\`
-🔰 *Build Status:* \`$(escape_markdown "$BUILD_STATUS")\`" \
-     "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
-fi
-
-# Finish
-BUILD_END=$(date +"%s")
-BUILD_TIME=$((BUILD_END - BUILD_START))
-
-send_message "$(escape_markdown "🚀 ${KERNEL_NAME} Kernel build completed in $((BUILD_TIME / 60)) min $((BUILD_TIME % 60)) sec")"
-
-# Clean up
-rm -rf out/
-rm -rf $ANYKERNEL3_DIR/Image $ANYKERNEL3_DIR/dtbo.img $ANYKERNEL3_DIR/dtb
-
-exit 0
-
+getclang
+updateclang
+compile
+zipping
+cleanup
+END=$(date +"%s")
+DIFF=$(($END - $START))
