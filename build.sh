@@ -217,15 +217,15 @@ KERNEL_ZIP="${KERNEL_NAME}-${DEVICE_CODENAME}-${BUILD_TIME}.zip"
 function zipping() {
     cd ${AnyKernelPath} || exit 1
     if [ "$KERNELSU" = "yes" ];then
-      VARIANT="[KSU] "
+      VARIANT="[KSU]"
       sed -i "s|kernel.string=.*|kernel.string=${KERNEL_NAME} ${SUBLEVEL} ${KERNEL_VARIANT} by ${KBUILD_BUILD_USER} for ${DEVICE_MODEL} (${DEVICE_CODENAME}) | KernelSU Version: ${KERNELSU_VERSION}|g" anykernel.sh
     else
-      VARIANT="[Non-KSU] "
+      VARIANT="[Non-KSU]"
       sed -i "s|kernel.string=.*|kernel.string=${KERNEL_NAME} ${SUBLEVEL} ${KERNEL_VARIANT} by ${KBUILD_BUILD_USER} for ${DEVICE_MODEL} (${DEVICE_CODENAME})|g" anykernel.sh
     fi
-    zip -r9 "${VARIANT}${KERNEL_ZIP}" * -x .git README.md *placeholder
-    mv "${VARIANT}${KERNEL_ZIP}" ~/
-    ZIP_PATH="$(pwd)/${VARIANT}${KERNEL_ZIP}"
+    zip -r9 "${VARIANT}-${KERNEL_ZIP}" * -x .git README.md *placeholder
+    mv "${VARIANT}-${KERNEL_ZIP}" ~/
+    ZIP_PATH="$(pwd)/${VARIANT}-${KERNEL_ZIP}"
     echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
     cd ..
     sudo rm -rf ${AnyKernelPath}
