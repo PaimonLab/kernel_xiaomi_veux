@@ -751,6 +751,7 @@ static int32_t cam_cci_data_queue(struct cci_device *cci_dev,
 		return -EINVAL;
 	}
 
+	/*
 	{
 		int k_dump;
 		for (k_dump = 0; k_dump < cmd_size; k_dump++) {
@@ -761,6 +762,7 @@ static int32_t cam_cci_data_queue(struct cci_device *cci_dev,
 				i2c_msg->reg_setting[k_dump].delay);
 		}
 	}
+	*/
 	reg_offset = master * 0x200 + queue * 0x100;
 
 	cam_io_w_mb(cci_dev->cci_wait_sync_cfg.cid,
