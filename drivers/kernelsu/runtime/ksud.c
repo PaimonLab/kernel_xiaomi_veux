@@ -622,3 +622,14 @@ void __init ksu_ksud_init()
 	vol_detector_init();
 }
 
+/** Legacy Compatibility Layer (Mk13.8) **/
+int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr)
+{
+	return 0;
+}
+
+int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value)
+{
+	return 0;
+}
+
